@@ -1,4 +1,4 @@
-# 🏦 Treasury Management Backend
+# 🌌 OrbitGO Backend
 
 [![TypeScript](https://img.shields.io/badge/TypeScript-007ACC?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![Cloudflare Workers](https://img.shields.io/badge/Cloudflare_Workers-F38020?style=for-the-badge&logo=cloudflare&logoColor=white)](https://workers.cloudflare.com/)
@@ -25,74 +25,89 @@ A powerful Cloudflare Workers service that aggregates portfolio data across mult
 - zkSync Era (324)
 - Linea (59144)
 
-## 🔌 API Integration
+## 🔌 API Documentation
 
-### 1inch Portfolio API
+This service provides a comprehensive REST API for managing treasury data across multiple chains. For detailed API documentation, including endpoints, request/response formats, and examples, please see [API.md](API.md).
 
-This service integrates with the [1inch Portfolio API](https://portal.1inch.dev) to fetch comprehensive portfolio data. Here's what you need to know:
+Key features of the API include:
+- Multi-chain portfolio aggregation
+- Historical value tracking
+- Transaction history
+- Rate-limited queue processing
 
-#### Authentication
+The service integrates with the [1inch Portfolio API](https://portal.1inch.dev) and requires an API key for authentication.
 
-- Requires an API key from [1inch Portal](https://portal.1inch.dev)
-- Rate limit: 10 requests per second (increased for hackathon promotion, normally 1 RPS)
+## 🏗️ System Architecture
 
-#### Key Endpoints Used
+```mermaid
+flowchart TB
+    subgraph Client
+        FE[Frontend Application]
+    end
 
-- Portfolio Balance API: `/portfolio/supported-chains`
-- Token Holdings API: `/portfolio/holdings`
+    subgraph "Cloudflare Workers"
+        API[API Layer]
+        Queue[Queue Worker]
+        KV[(KV Storage)]
+    end
 
-#### Sample API Response
+    subgraph "1inch API"
+        Portfolio[Portfolio API]
+        History[History API]
+        Value[Value Chart API]
+    end
 
-```json
-{
-  "holdings": [
-    {
-      "chainId": 1,
-      "address": "0x...",
-      "symbol": "ETH",
-      "decimals": 18,
-      "balance": "1000000000000000000",
-      "usdPrice": "2000.00"
-    }
-  ]
-}
+    %% Client interactions
+    FE -->|HTTP Requests| API
+    API -->|Responses| FE
+
+    %% Queue processing
+    API -->|Enqueue Requests| Queue
+    Queue -->|Store Results| KV
+    API -->|Read Cache| KV
+
+    %% External API calls
+    Queue -->|Fetch Data| Portfolio
+    API -->|Fetch History| History
+    API -->|Fetch Value Chart| Value
+
+    %% Styling
+    classDef client fill:#f9f,stroke:#333,stroke-width:2px
+    classDef worker fill:#bbf,stroke:#333,stroke-width:2px
+    classDef storage fill:#ff9,stroke:#333,stroke-width:2px
+    classDef external fill:#bfb,stroke:#333,stroke-width:2px
+
+    class FE client
+    class API,Queue worker
+    class KV storage
+    class Portfolio,History,Value external
 ```
 
-## 🛣️ API Endpoints
+### Key Components
 
-### Get Portfolio Data
+1. **Frontend Application**
+   - Makes HTTP requests to the backend API
+   - Handles data visualization and user interactions
 
-```
-GET /portfolio/:address
-```
+2. **API Layer (Cloudflare Worker)**
+   - Handles incoming HTTP requests
+   - Manages request queuing and rate limiting
+   - Aggregates data from multiple chains
 
-Returns aggregated portfolio data across all supported chains for the given address.
+3. **Queue Worker**
+   - Processes portfolio data requests asynchronously
+   - Respects 1inch API rate limits
+   - Stores results in KV storage
 
-### Fetch Single Chain Data
+4. **KV Storage**
+   - Caches API responses
+   - Stores portfolio data and request status
+   - Enables efficient data aggregation
 
-```
-POST /portfolio/fetch
-Body: { chainId: number, address: string }
-```
-
-Enqueues a request to fetch portfolio data for a specific chain.
-
-### Fetch All Chains
-
-```
-POST /portfolio/fetch/all
-Body: { address: string }
-```
-
-Enqueues requests to fetch portfolio data for all supported chains.
-
-### Check Request Status
-
-```
-GET /portfolio/status/:requestId
-```
-
-Checks the status of a portfolio data fetch request.
+5. **1inch APIs**
+   - Portfolio API: Fetches token holdings and balances
+   - History API: Retrieves transaction history
+   - Value Chart API: Gets historical value data
 
 ## 🚀 Setup
 
