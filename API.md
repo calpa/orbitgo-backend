@@ -12,16 +12,12 @@
 GET /portfolio/:address
 ```
 
-Returns aggregated portfolio data across all supported chains for the given address.
+Returns aggregated portfolio data across all supported chains for the given address. This endpoint automatically triggers data fetching for all chains and returns the aggregated result.
 
 #### Parameters
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| address | `string` | Ethereum address to fetch portfolio for |
-
-#### Notes
-- This endpoint automatically triggers data fetching for all chains if not already available
-- Uses cached data when possible to improve performance
+| address | `string` | Ethereum address (must start with '0x') |
 
 #### Response
 ```json
@@ -49,18 +45,20 @@ Returns aggregated portfolio data across all supported chains for the given addr
 }
 ```
 
-### Enqueue Portfolio Request
+### Fetch Single Chain Data
 ```http
-POST /portfolio/request/:chainId/:address
+POST /portfolio/fetch
 ```
 
 Enqueues a request to fetch portfolio data for a specific chain.
 
-#### Parameters
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| chainId | `number` | Chain ID to fetch data for |
-| address | `string` | Ethereum address to fetch portfolio for |
+#### Request Body
+```json
+{
+  "chainId": 1,
+  "address": "0x..."
+}
+```
 
 #### Response
 ```json
@@ -69,17 +67,19 @@ Enqueues a request to fetch portfolio data for a specific chain.
 }
 ```
 
-### Enqueue Multi-Chain Request
+### Fetch All Chains
 ```http
-POST /portfolio/request/all/:address
+POST /portfolio/fetch/all
 ```
 
 Enqueues requests to fetch portfolio data for all supported chains.
 
-#### Parameters
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| address | `string` | Ethereum address to fetch portfolio for |
+#### Request Body
+```json
+{
+  "address": "0x..."
+}
+```
 
 #### Response
 ```json
@@ -121,12 +121,17 @@ GET /portfolio/:address/value-chart
 
 Returns historical value chart data for an address.
 
+#### Parameters
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| address | `string` | Ethereum address (must start with '0x') |
+
 #### Query Parameters
 | Parameter | Type | Description |
 |-----------|------|-------------|
 | chainId | `number` | Optional chain ID to filter by |
-| timerange | `string` | Optional time range ('1day', '1week', '1month', '1year', 'all') |
-| useCache | `boolean` | Optional, whether to use cached data |
+| timerange | `string` | Time range ('1day', '1week', '1month', '1year', 'all'). Default: '1month' |
+| useCache | `boolean` | Whether to use cached data. Default: true |
 
 #### Response
 ```json
@@ -147,14 +152,19 @@ GET /portfolio/:address/history
 
 Returns transaction history for an address.
 
+#### Parameters
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| address | `string` | Ethereum address (must start with '0x') |
+
 #### Query Parameters
 | Parameter | Type | Description |
 |-----------|------|-------------|
 | chainId | `number` | Optional chain ID to filter by |
-| limit | `number` | Optional max number of events (default: 100) |
+| limit | `number` | Max number of events. Default: 100 |
 | tokenAddress | `string` | Optional token address to filter by |
-| fromTimestampMs | `number` | Optional start timestamp |
-| toTimestampMs | `number` | Optional end timestamp |
+| fromTimestampMs | `number` | Optional start timestamp in milliseconds |
+| toTimestampMs | `number` | Optional end timestamp in milliseconds |
 
 #### Response
 ```json

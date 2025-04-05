@@ -2,7 +2,8 @@ import { Hono } from "hono";
 import { createContextLogger } from "../utils/logger";
 import { InchService } from "../services/inchService";
 import { Environment } from "../types/environment";
-import { TimeRange } from "../types/inch";
+import { TimeRange, ValueChartResponse } from "../types/inch";
+import supportedChains from "../constants/supported_chains.json";
 
 const portfolio = new Hono<{ Bindings: Environment }>();
 const logger = createContextLogger("/src/routes/portfolio.ts", "portfolio");
@@ -93,7 +94,7 @@ portfolio.get("/:address", async (c) => {
 });
 
 /**
- * Get value chart data for an address
+ * Get value chart data for an address for all chains
  * @route GET /:address/value-chart
  */
 portfolio.get("/:address/value-chart", async (c) => {
@@ -108,44 +109,52 @@ portfolio.get("/:address/value-chart", async (c) => {
     return c.json({ error: "Invalid address format" }, 400);
   }
 
-  const chainId = c.req.query("chainId")
-    ? parseInt(c.req.query("chainId")!)
-    : undefined;
   const timerange = (c.req.query("timerange") || "1month") as TimeRange;
   const useCache = c.req.query("useCache") !== "false";
 
-  if (chainId && !InchService.isSupportedChain(chainId)) {
-    return c.json({ error: "Unsupported chain ID" }, 400);
-  }
-
   routeLogger.debug(
-    { address, chainId, timerange, useCache },
+    { address, timerange, useCache },
     "Fetching value chart data"
   );
 
-  try {
-    const data = await inchService.getValueChart(
-      address,
-      chainId,
-      timerange,
-      useCache
-    );
-    routeLogger.debug(
-      { address, chainId, dataPoints: data.result.length },
-      "Value chart data retrieved"
-    );
-    return c.json(data);
-  } catch (error) {
-    routeLogger.error(
-      {
+  // Get All Chains instead of just one chain
+  const chains = supportedChains.result;
+
+  const result: {
+    [chainId: number]: ValueChartResponse["result"];
+  } = {};
+
+  for (const chain of chains) {
+    try {
+      const data = await inchService.getValueChart(
         address,
-        chainId,
-        error: error instanceof Error ? error.message : "Unknown error",
-      },
-      "Failed to fetch value chart data"
-    );
-    return c.json({ error: "Failed to fetch value chart data" }, 500);
+        chain.id,
+        timerange,
+        useCache
+      );
+      routeLogger.debug(
+        { address, dataPoints: data.result.length },
+        "Value chart data retrieved"
+      );
+      result[chain.id] = data.result;
+    } catch (error) {
+      routeLogger.error(
+        {
+          address,
+          error: error instanceof Error ? error.message : "Unknown error",
+        },
+        "Failed to fetch value chart data"
+      );
+    }
   }
+
+  return c.json({
+    message: "Value chart data retrieved",
+    address,
+    timerange,
+    useCache,
+    result,
+  });
 });
 
 /**
