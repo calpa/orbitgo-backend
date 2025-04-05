@@ -14,6 +14,8 @@ const logger = createContextLogger("/src/index.ts", "middleware");
 // Add request timing
 app.use(timing());
 
+app.use(cors());
+
 // Add request logging
 app.use("*", async (c, next) => {
   const method = c.req.method;
