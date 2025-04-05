@@ -1,16 +1,6 @@
 import axios from "axios";
-import {
-  PortfolioResponse,
-  QueuedRequest,
-  Chain,
-  SupportedChains,
-} from "../types/inch";
-import supportedChains from "../constants/supported_chains.json" assert { type: "json" };
+import { PortfolioResponse } from "../types/inch";
 import { createContextLogger } from "../utils/logger";
-
-const INCH_API_URL = "https://api.1inch.dev";
-const RETRY_DELAY = 1000; // 1 second
-const MAX_RETRIES = 3;
 
 interface AggregatedPortfolio {
   totalValueUsd: number;
