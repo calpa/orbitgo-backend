@@ -5,6 +5,7 @@ import { InchService } from "./services/inchService";
 import { createContextLogger } from "./utils/logger";
 import { portfolio } from "./routes/portfolio";
 import { webhook } from "./routes/webhook";
+import { token } from "./routes/token";
 import { Environment } from "./types/environment";
 
 const app = new Hono<{ Bindings: Environment }>();
@@ -15,6 +16,9 @@ const logger = createContextLogger("/src/index.ts", "middleware");
 app.use(timing());
 
 app.use(cors());
+
+// Add token routes
+app.route("/token", token);
 
 // Add webhook routes
 app.route("/webhook", webhook);
