@@ -1,10 +1,8 @@
 import { Hono } from "hono";
-import { PortfolioQueueMessage } from "./types/inch";
+import { cors } from "hono/cors";
 import { InchService } from "./services/inchService";
-import { createContextLogger } from "./services/logger";
+import { createContextLogger } from "./utils/logger";
 import { timing } from "hono/timing";
-
-const logger = createContextLogger('index.ts', 'middleware');
 
 type Environment = {
   INCH_API_KEY: string;
@@ -12,7 +10,14 @@ type Environment = {
   portfolio_queue: Queue<PortfolioQueueMessage>;
 };
 
+interface PortfolioQueueMessage {
+  chainId: number;
+  address: `0x${string}`;
+  requestId: string;
+}
+
 const app = new Hono<{ Bindings: Environment }>();
+const logger = createContextLogger("/src/index.ts", "middleware");
 
 // Initialize InchService for each request
 // Add request timing
@@ -25,7 +30,9 @@ app.use("*", async (c, next) => {
   const startTime = Date.now();
 
   // Log request details
-  const requestBody = ['POST', 'PUT', 'PATCH'].includes(method) ? await c.req.json() : undefined;
+  const requestBody = ["POST", "PUT", "PATCH"].includes(method)
+    ? await c.req.json()
+    : undefined;
   logger.info({ method, path, body: requestBody }, "Incoming request");
 
   try {
@@ -35,7 +42,9 @@ app.use("*", async (c, next) => {
 
     // Clone the response to log its body
     const response = c.res;
-    const responseBody = response.headers.get('content-type')?.includes('application/json')
+    const responseBody = response.headers
+      .get("content-type")
+      ?.includes("application/json")
       ? await c.res.clone().json()
       : undefined;
 
@@ -45,7 +54,8 @@ app.use("*", async (c, next) => {
     );
   } catch (error) {
     const duration = Date.now() - startTime;
-    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    const errorMessage =
+      error instanceof Error ? error.message : "Unknown error";
 
     logger.error(
       { method, path, error: errorMessage, duration },
@@ -83,16 +93,19 @@ app.use("*", async (c, next) => {
  * }
  */
 app.post("/portfolio/fetch", async (c) => {
-  const routeLogger = createContextLogger('index.ts', 'portfolio.fetch');
+  const routeLogger = createContextLogger("index.ts", "portfolio.fetch");
   const inchService = c.get("inchService");
   const { chainId, address } = await c.req.json<{
     chainId: number;
     address: `0x${string}`;
   }>();
 
-  routeLogger.debug({ chainId, address }, "Processing single chain portfolio request");
+  routeLogger.debug(
+    { chainId, address },
+    "Processing single chain portfolio request"
+  );
   const requestId = await inchService.enqueuePortfolioRequest(chainId, address);
-  
+
   const response = { requestId };
   routeLogger.debug({ response }, "Single chain portfolio request enqueued");
   return c.json(response);
@@ -118,7 +131,7 @@ app.post("/portfolio/fetch", async (c) => {
  * }
  */
 app.post("/portfolio/fetch/all", async (c) => {
-  const routeLogger = createContextLogger('index.ts', 'portfolio.fetchAll');
+  const routeLogger = createContextLogger("index.ts", "portfolio.fetchAll");
   const inchService = c.get("inchService");
   const { address } = await c.req.json<{ address: `0x${string}` }>();
 
@@ -167,13 +180,13 @@ app.post("/portfolio/fetch/all", async (c) => {
  * }
  */
 app.get("/portfolio/status/:requestId", async (c) => {
-  const routeLogger = createContextLogger('index.ts', 'portfolio.status');
+  const routeLogger = createContextLogger("index.ts", "portfolio.status");
   const inchService = c.get("inchService");
   const requestId = c.req.param("requestId");
 
   routeLogger.debug({ requestId }, "Checking portfolio request status");
   const status = await inchService.getRequestStatus(requestId);
-  
+
   routeLogger.debug({ requestId, status }, "Portfolio status retrieved");
   return c.json(status);
 });
@@ -211,17 +224,17 @@ app.get("/portfolio/status/:requestId", async (c) => {
  * }
  */
 app.get("/portfolio/:address", async (c) => {
-  const routeLogger = createContextLogger('index.ts', 'portfolio.get');
+  const routeLogger = createContextLogger("index.ts", "portfolio.get");
   const inchService = c.get("inchService");
   const address = c.req.param("address") as `0x${string}`;
 
-  if (!address.startsWith('0x')) {
+  if (!address.startsWith("0x")) {
     return c.json({ error: "Invalid address format" }, 400);
   }
 
   routeLogger.debug({ address }, "Fetching aggregated portfolio data");
   const data = await inchService.aggregatePortfolio(address);
-  
+
   routeLogger.debug(
     { address, chainCount: data.chains.length },
     "Aggregated portfolio data retrieved"
@@ -232,60 +245,67 @@ app.get("/portfolio/:address", async (c) => {
 export default {
   fetch: app.fetch,
   async queue(batch: MessageBatch<PortfolioQueueMessage>, env: Environment) {
-    const logger = createContextLogger('index.ts', 'queue.processor');
+    const logger = createContextLogger("index.ts", "queue.processor");
     const inchService = new InchService(env);
 
     for (const message of batch.messages) {
       const { chainId, address, requestId } = message.body;
-      
+
       try {
-        logger.info({ chainId, address, requestId }, 'Processing queued portfolio request');
+        logger.info(
+          { chainId, address, requestId },
+          "Processing queued portfolio request"
+        );
         const startTime = Date.now();
-        
+
         const data = await inchService.fetchPortfolioData(chainId, address);
         const duration = Date.now() - startTime;
 
         logger.info(
           { chainId, address, requestId, duration },
-          'Successfully processed portfolio request'
+          "Successfully processed portfolio request"
         );
 
+        const key = `portfolio-${address}-${chainId}-${requestId}`;
         await env.PORTFOLIO_KV.put(
-          requestId,
+          key,
           JSON.stringify({
-            status: 'completed',
+            status: "completed",
             data,
             timestamp: Date.now(),
           })
         );
+
+        logger.info(
+          { chainId, address, requestId, key },
+          "Portfolio data saved to KV"
+        );
       } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        const errorMessage =
+          error instanceof Error ? error.message : "Unknown error";
         logger.error(
           { chainId, address, requestId, error: errorMessage },
-          'Failed to process portfolio request'
+          "Failed to process portfolio request"
         );
 
+        const key = `portfolio-${address}-${chainId}-${requestId}`;
         await env.PORTFOLIO_KV.put(
-          requestId,
+          key,
           JSON.stringify({
-            status: 'failed',
+            status: "failed",
             error: errorMessage,
             timestamp: Date.now(),
           })
         );
 
-        await env.PORTFOLIO_KV.put(
-          requestId,
-          JSON.stringify({
-            status: 'failed',
-            error: errorMessage,
-            timestamp: Date.now(),
-          })
+        logger.info(
+          { chainId, address, requestId, key, error: errorMessage },
+          "Failed to process portfolio request"
         );
       }
 
       // Rate limiting - 1 RPS
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      await new Promise((resolve) => setTimeout(resolve, 1000));
     }
   },
 };

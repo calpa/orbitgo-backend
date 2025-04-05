@@ -11,6 +11,7 @@
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20250214.0",
+    "pino-pretty": "^13.0.0",
     "wrangler": "^4.4.0"
   }
 }

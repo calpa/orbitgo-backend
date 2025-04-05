@@ -6,7 +6,7 @@ import {
   SupportedChains,
 } from "../types/inch";
 import supportedChains from "../constants/supported_chains.json" assert { type: "json" };
-import { createContextLogger } from "./logger";
+import { createContextLogger } from "../utils/logger";
 
 const INCH_API_URL = "https://api.1inch.dev";
 const RETRY_DELAY = 1000; // 1 second
@@ -36,7 +36,10 @@ interface PortfolioPosition {
 }
 
 export class InchService {
-  private logger = createContextLogger("inchService.ts", "InchService");
+  private logger = createContextLogger(
+    "/src/services/inchService.ts",
+    "InchService"
+  );
 
   private env: any;
 
@@ -171,10 +174,56 @@ export class InchService {
       positions: [],
     };
 
+    // List all keys for this address
+    const searchPattern = `portfolio-${address}`;
+    const keys = await this.env.PORTFOLIO_KV.list({ prefix: searchPattern });
+
+    this.logger.debug(
+      { address, keyCount: keys.keys.length },
+      "Found portfolio data keys"
+    );
+
     await Promise.all(
       chains.map(async (chainId) => {
         try {
-          const data = await this.fetchPortfolioData(chainId, address);
+          // Find the most recent data for this chain
+          const key = keys.keys
+            .filter((k: { name: string }) => k.name.includes(`-${chainId}-`))
+            .sort((a: { name: string }, b: { name: string }) =>
+              b.name.localeCompare(a.name)
+            )[0];
+
+          if (!key) {
+            result.chains.push({
+              id: chainId,
+              name: InchService.getChainName(chainId),
+              status: "not_found",
+            });
+            return;
+          }
+
+          const rawData = await this.env.PORTFOLIO_KV.get(key.name);
+          if (!rawData) {
+            result.chains.push({
+              id: chainId,
+              name: InchService.getChainName(chainId),
+              status: "not_found",
+            });
+            return;
+          }
+
+          const parsedData = JSON.parse(rawData);
+          if (parsedData.status !== "completed") {
+            result.chains.push({
+              id: chainId,
+              name: InchService.getChainName(chainId),
+              status: parsedData.status,
+              error: parsedData.error,
+            });
+            return;
+          }
+
+          const data = parsedData.data as PortfolioResponse;
           result.positions.push(...data.result);
 
           const chainValue = data.result.reduce(
