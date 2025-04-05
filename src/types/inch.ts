@@ -83,7 +83,7 @@ export interface QueuedRequest {
 }
 
 export interface PortfolioStatus {
-  status: 'queued' | 'completed' | 'failed';
+  status: "queued" | "completed" | "failed";
   data?: PortfolioResponse;
   error?: string;
   position?: number;
@@ -105,17 +105,17 @@ export interface ValueChartResponse {
   };
 }
 
-export type TimeRange = '1day' | '1week' | '1month' | '1year' | 'all';
+export type TimeRange = "1day" | "1week" | "1month" | "1year" | "all";
 
 export type TokenAction = {
   chainId: string;
   address: string;
-  standard: 'Native' | 'ERC20' | 'ERC721' | 'ERC1155';
+  standard: "Native" | "ERC20" | "ERC721" | "ERC1155";
   fromAddress: string;
   toAddress: string;
   tokenId?: string;
   amount?: string;
-  direction: 'In' | 'Out' | 'Self' | 'On';
+  direction: "In" | "Out" | "Self" | "On";
   priceToUsd?: number;
 };
 
@@ -142,8 +142,8 @@ export type HistoryEvent = {
   timeMs: number;
   address: string;
   type: number;
-  rating: 'Reliable' | 'Scam';
-  direction: 'in' | 'out';
+  rating: "Reliable" | "Scam";
+  direction: "in" | "out";
   details: TransactionDetails;
   id: string;
   eventOrderInTransaction: number;
@@ -152,3 +152,26 @@ export type HistoryEvent = {
 export type HistoryResponse = {
   items: HistoryEvent[];
 };
+
+export interface AggregatedPortfolio {
+  totalValueUsd: number;
+  chains: ChainStatus[];
+  positions: PortfolioPosition[];
+}
+
+export interface ChainStatus {
+  id: number;
+  name: string;
+  status: "completed" | "failed" | "not_found" | "queued";
+  error?: string;
+  data?: PortfolioResponse;
+}
+
+export interface MultiChainResponse {
+  chains: ChainStatus[];
+  totalValueUsd: number;
+}
+
+export interface PortfolioPosition {
+  value_usd: number;
+}

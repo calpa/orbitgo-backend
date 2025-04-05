@@ -79,7 +79,11 @@ portfolio.get("/:address", async (c) => {
   }
 
   routeLogger.debug({ address }, "Fetching aggregated portfolio data");
-  const data = await inchService.aggregatePortfolio(address);
+  const data = await inchService.aggregatePortfolio(
+    address,
+    c.env,
+    "portfolio.get"
+  );
 
   routeLogger.debug(
     { address, chainCount: data.chains.length },
@@ -93,7 +97,10 @@ portfolio.get("/:address", async (c) => {
  * @route GET /:address/value-chart
  */
 portfolio.get("/:address/value-chart", async (c) => {
-  const routeLogger = createContextLogger("portfolio.ts", "portfolio.valueChart");
+  const routeLogger = createContextLogger(
+    "portfolio.ts",
+    "portfolio.valueChart"
+  );
   const inchService = c.get("inchService");
   const address = c.req.param("address") as `0x${string}`;
 
@@ -101,7 +108,9 @@ portfolio.get("/:address/value-chart", async (c) => {
     return c.json({ error: "Invalid address format" }, 400);
   }
 
-  const chainId = c.req.query("chainId") ? parseInt(c.req.query("chainId")!) : undefined;
+  const chainId = c.req.query("chainId")
+    ? parseInt(c.req.query("chainId")!)
+    : undefined;
   const timerange = (c.req.query("timerange") || "1month") as TimeRange;
   const useCache = c.req.query("useCache") !== "false";
 
@@ -115,7 +124,12 @@ portfolio.get("/:address/value-chart", async (c) => {
   );
 
   try {
-    const data = await inchService.getValueChart(address, chainId, timerange, useCache);
+    const data = await inchService.getValueChart(
+      address,
+      chainId,
+      timerange,
+      useCache
+    );
     routeLogger.debug(
       { address, chainId, dataPoints: data.result.length },
       "Value chart data retrieved"
@@ -123,13 +137,14 @@ portfolio.get("/:address/value-chart", async (c) => {
     return c.json(data);
   } catch (error) {
     routeLogger.error(
-      { address, chainId, error: error instanceof Error ? error.message : "Unknown error" },
+      {
+        address,
+        chainId,
+        error: error instanceof Error ? error.message : "Unknown error",
+      },
       "Failed to fetch value chart data"
     );
-    return c.json(
-      { error: "Failed to fetch value chart data" },
-      500
-    );
+    return c.json({ error: "Failed to fetch value chart data" }, 500);
   }
 });
 
@@ -160,11 +175,19 @@ portfolio.get("/:address/history", async (c) => {
 
   // Get query parameters
   const { searchParams } = new URL(c.req.url);
-  const chainId = searchParams.get("chainId") ? parseInt(searchParams.get("chainId")!) : undefined;
-  const limit = searchParams.get("limit") ? parseInt(searchParams.get("limit")!) : undefined;
+  const chainId = searchParams.get("chainId")
+    ? parseInt(searchParams.get("chainId")!)
+    : undefined;
+  const limit = searchParams.get("limit")
+    ? parseInt(searchParams.get("limit")!)
+    : undefined;
   const tokenAddress = searchParams.get("tokenAddress") || undefined;
-  const fromTimestampMs = searchParams.get("fromTimestampMs") ? parseInt(searchParams.get("fromTimestampMs")!) : undefined;
-  const toTimestampMs = searchParams.get("toTimestampMs") ? parseInt(searchParams.get("toTimestampMs")!) : undefined;
+  const fromTimestampMs = searchParams.get("fromTimestampMs")
+    ? parseInt(searchParams.get("fromTimestampMs")!)
+    : undefined;
+  const toTimestampMs = searchParams.get("toTimestampMs")
+    ? parseInt(searchParams.get("toTimestampMs")!)
+    : undefined;
 
   routeLogger.debug(
     { address, chainId, limit, tokenAddress, fromTimestampMs, toTimestampMs },

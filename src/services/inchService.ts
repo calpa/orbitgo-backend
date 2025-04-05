@@ -1,29 +1,14 @@
 import axios from "axios";
-import { HistoryResponse, PortfolioResponse, TimeRange, ValueChartResponse } from "../types/inch";
+import {
+  HistoryResponse,
+  PortfolioResponse,
+  TimeRange,
+  ValueChartResponse,
+} from "../types/inch";
 import { createContextLogger } from "../utils/logger";
-
-interface AggregatedPortfolio {
-  totalValueUsd: number;
-  chains: ChainStatus[];
-  positions: PortfolioPosition[];
-}
-
-interface ChainStatus {
-  id: number;
-  name: string;
-  status: "completed" | "failed" | "not_found" | "queued";
-  error?: string;
-  data?: PortfolioResponse;
-}
-
-interface MultiChainResponse {
-  chains: ChainStatus[];
-  totalValueUsd: number;
-}
-
-interface PortfolioPosition {
-  value_usd: number;
-}
+import { aggregatePortfolio } from "./inch/aggregatePortfolio";
+import type { AggregatedPortfolio } from "../types/inch";
+import { getValueChart } from "./inch/getValueChart";
 
 export class InchService {
   async getHistory(
@@ -34,23 +19,27 @@ export class InchService {
     fromTimestampMs?: number,
     toTimestampMs?: number
   ): Promise<HistoryResponse> {
-    const url = new URL(`https://api.1inch.dev/history/v2.0/history/${address}/events`);
-    
-    if (chainId) url.searchParams.append('chainId', chainId.toString());
-    if (limit) url.searchParams.append('limit', limit.toString());
-    if (tokenAddress) url.searchParams.append('tokenAddress', tokenAddress);
-    if (fromTimestampMs) url.searchParams.append('fromTimestampMs', fromTimestampMs.toString());
-    if (toTimestampMs) url.searchParams.append('toTimestampMs', toTimestampMs.toString());
+    const url = new URL(
+      `https://api.1inch.dev/history/v2.0/history/${address}/events`
+    );
+
+    if (chainId) url.searchParams.append("chainId", chainId.toString());
+    if (limit) url.searchParams.append("limit", limit.toString());
+    if (tokenAddress) url.searchParams.append("tokenAddress", tokenAddress);
+    if (fromTimestampMs)
+      url.searchParams.append("fromTimestampMs", fromTimestampMs.toString());
+    if (toTimestampMs)
+      url.searchParams.append("toTimestampMs", toTimestampMs.toString());
 
     this.logger.info(
       { address, chainId, limit, tokenAddress, fromTimestampMs, toTimestampMs },
-      'Fetching history from 1inch API'
+      "Fetching history from 1inch API"
     );
 
     const response = await axios.get<HistoryResponse>(url.toString(), {
       headers: {
         Authorization: `Bearer ${this.env.INCH_API_KEY}`,
-        Accept: 'application/json',
+        Accept: "application/json",
       },
     });
 
@@ -60,7 +49,7 @@ export class InchService {
         chainId,
         eventCount: response.data.items.length,
       },
-      'Successfully fetched history data'
+      "Successfully fetched history data"
     );
 
     return response.data;
@@ -191,136 +180,27 @@ export class InchService {
     return parsedData;
   }
 
-  async getValueChart(
+  public getValueChart(
     address: `0x${string}`,
     chainId?: number,
-    timerange: TimeRange = '1month',
+    timerange: TimeRange = "1month",
     useCache: boolean = true
   ): Promise<ValueChartResponse> {
-    const url = new URL('https://api.1inch.dev/portfolio/portfolio/v4/general/value_chart');
-    url.searchParams.append('addresses', address);
-    if (chainId) url.searchParams.append('chain_id', chainId.toString());
-    url.searchParams.append('timerange', timerange);
-    url.searchParams.append('use_cache', useCache.toString());
-
-    this.logger.info(
-      { address, chainId, timerange, useCache },
-      'Fetching value chart from 1inch API'
+    return getValueChart(
+      this.env,
+      "getValueChart",
+      address,
+      chainId,
+      timerange,
+      useCache
     );
-
-    const response = await axios.get<ValueChartResponse>(url.toString(), {
-      headers: {
-        Authorization: `Bearer ${this.env.INCH_API_KEY}`,
-        Accept: 'application/json',
-      },
-    });
-
-    this.logger.info(
-      {
-        address,
-        chainId,
-        dataPoints: response.data.result.length,
-      },
-      'Successfully fetched value chart data'
-    );
-
-    return response.data;
   }
 
-  async aggregatePortfolio(
-    address: `0x${string}`
+  public aggregatePortfolio(
+    address: `0x${string}`,
+    env: any,
+    context: string
   ): Promise<AggregatedPortfolio> {
-    this.logger.debug({ address }, "Aggregating portfolio data across chains");
-    const chains = InchService.getSupportedChains();
-
-    const result: AggregatedPortfolio = {
-      totalValueUsd: 0,
-      chains: [],
-      positions: [],
-    };
-
-    // List all keys for this address
-    const searchPattern = `portfolio-${address}`;
-    const keys = await this.env.PORTFOLIO_KV.list({ prefix: searchPattern });
-
-    this.logger.debug(
-      { address, keyCount: keys.keys.length },
-      "Found portfolio data keys"
-    );
-
-    await Promise.all(
-      chains.map(async (chainId) => {
-        try {
-          // Find the most recent data for this chain
-          const key = keys.keys
-            .filter((k: { name: string }) => k.name.includes(`-${chainId}-`))
-            .sort((a: { name: string }, b: { name: string }) =>
-              b.name.localeCompare(a.name)
-            )[0];
-
-          if (!key) {
-            result.chains.push({
-              id: chainId,
-              name: InchService.getChainName(chainId),
-              status: "not_found",
-            });
-            return;
-          }
-
-          const rawData = await this.env.PORTFOLIO_KV.get(key.name);
-          if (!rawData) {
-            result.chains.push({
-              id: chainId,
-              name: InchService.getChainName(chainId),
-              status: "not_found",
-            });
-            return;
-          }
-
-          const parsedData = JSON.parse(rawData);
-          if (parsedData.status !== "completed") {
-            result.chains.push({
-              id: chainId,
-              name: InchService.getChainName(chainId),
-              status: parsedData.status,
-              error: parsedData.error,
-            });
-            return;
-          }
-
-          const data = parsedData.data as PortfolioResponse;
-          result.positions.push(...data.result);
-
-          const chainValue = data.result.reduce(
-            (sum, pos) => sum + pos.value_usd,
-            0
-          );
-          result.totalValueUsd += chainValue;
-
-          result.chains.push({
-            id: chainId,
-            name: InchService.getChainName(chainId),
-            status: "completed",
-            data: data,
-          });
-        } catch (error) {
-          this.logger.error(
-            {
-              chainId: chainId,
-              error: error instanceof Error ? error.message : "Unknown error",
-            },
-            "Error aggregating chain data"
-          );
-          result.chains.push({
-            id: chainId,
-            name: InchService.getChainName(chainId),
-            status: "failed",
-            error: "Internal error while aggregating data",
-          });
-        }
-      })
-    );
-
-    return result;
+    return aggregatePortfolio(address, env, context);
   }
 }
