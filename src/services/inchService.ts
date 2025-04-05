@@ -13,24 +13,56 @@ const RETRY_DELAY = 1000; // 1 second
 const MAX_RETRIES = 3;
 
 interface AggregatedPortfolio {
-  protocols: {
-    [chainId: number]: PortfolioResponse["protocols"];
-  };
-  timestamp: number;
-  address: string;
-  chains: {
-    id: number;
-    name: string;
-    status: "completed" | "failed" | "not_found";
-    error?: string;
-  }[];
+  totalValueUsd: number;
+  chains: ChainStatus[];
+  positions: PortfolioPosition[];
+}
+
+interface ChainStatus {
+  id: number;
+  name: string;
+  status: "completed" | "failed" | "not_found" | "queued";
+  error?: string;
+  data?: PortfolioResponse;
+}
+
+interface MultiChainResponse {
+  chains: ChainStatus[];
+  totalValueUsd: number;
+}
+
+interface PortfolioPosition {
+  value_usd: number;
 }
 
 export class InchService {
   private logger = createContextLogger("inchService.ts", "InchService");
-  private queue: QueuedRequest[] = [];
-  private processing = false;
+
   private env: any;
+
+  private static CHAIN_NAMES: Record<number, string> = {
+    1: "Ethereum",
+    56: "BSC",
+    137: "Polygon",
+    42161: "Arbitrum",
+    10: "Optimism",
+    43114: "Avalanche",
+    8453: "Base",
+    324: "zkSync Era",
+    59144: "Linea",
+  };
+
+  public static getSupportedChains(): number[] {
+    return Object.keys(this.CHAIN_NAMES).map(Number);
+  }
+
+  public static isSupportedChain(chainId: number): boolean {
+    return chainId in this.CHAIN_NAMES;
+  }
+
+  public static getChainName(chainId: number): string {
+    return this.CHAIN_NAMES[chainId] || `Chain ${chainId}`;
+  }
 
   constructor(env: any) {
     this.env = env;
@@ -40,16 +72,16 @@ export class InchService {
     address: `0x${string}`
   ): Promise<string[]> {
     this.logger.info({ address }, "Starting multichain portfolio request");
-    const chains = (supportedChains as SupportedChains).result;
+    const chains = InchService.getSupportedChains();
     this.logger.debug({ chainCount: chains.length }, "Processing chains");
 
     return Promise.all(
-      chains.map((chain: Chain) => {
+      chains.map((chain: number) => {
         this.logger.debug(
-          { chainId: chain.id, chainName: chain.name },
+          { chainId: chain, chainName: InchService.getChainName(chain) },
           "Enqueueing chain request"
         );
-        return this.enqueuePortfolioRequest(chain.id, address);
+        return this.enqueuePortfolioRequest(chain, address);
       })
     );
   }
@@ -59,136 +91,55 @@ export class InchService {
     address: `0x${string}`
   ): Promise<string> {
     const requestId = crypto.randomUUID();
-    const request: QueuedRequest = {
+
+    // Send to queue instead of processing directly
+    await this.env.portfolio_queue.send({
       chainId,
       address,
       requestId,
-      retryCount: 0,
       timestamp: Date.now(),
-    };
+    });
 
     this.logger.info(
       { requestId, chainId, address },
-      "Enqueueing portfolio request"
+      "Portfolio request enqueued to Cloudflare Queue"
     );
-    this.queue.push(request);
-
-    this.logger.debug(
-      { queueLength: this.queue.length },
-      "Current queue status"
-    );
-
-    // Start processing if not already running
-    if (!this.processing) {
-      this.logger.debug({}, "Starting queue processing");
-      this.processQueue();
-    }
 
     return requestId;
   }
 
-  private async processQueue() {
-    if (this.processing || this.queue.length === 0) return;
+  public async fetchPortfolioData(
+    chainId: number,
+    address: `0x${string}`
+  ): Promise<PortfolioResponse> {
+    const url = `https://api.1inch.dev/portfolio/portfolio/v4/overview/protocols/details?chain_id=${chainId}&addresses=${address}`;
 
-    this.processing = true;
     this.logger.info(
-      { queueLength: this.queue.length },
-      "Starting queue processing"
+      { chainId, address, url },
+      "Fetching portfolio data from 1inch API"
     );
 
-    while (this.queue.length > 0) {
-      const request = this.queue[0];
-      this.logger.debug(
-        { requestId: request.requestId, chainId: request.chainId },
-        "Processing request"
-      );
+    const response = await axios.get<PortfolioResponse>(url, {
+      headers: {
+        Authorization: `Bearer ${this.env.INCH_API_KEY}`,
+        Accept: "application/json",
+      },
+    });
 
-      try {
-        const startTime = Date.now();
-        const data = await this.fetchPortfolioData(
-          request.chainId,
-          request.address
-        );
-        const duration = Date.now() - startTime;
+    // Log summary of positions found
+    const positions = response.data.result;
+    const totalValue = positions.reduce((sum, pos) => sum + pos.value_usd, 0);
 
-        this.logger.info(
-          { requestId: request.requestId, chainId: request.chainId, duration },
-          "Successfully fetched portfolio data"
-        );
-
-        await this.env.PORTFOLIO_KV.put(
-          request.requestId,
-          JSON.stringify({
-            status: "completed",
-            data,
-            timestamp: Date.now(),
-          })
-        );
-        this.queue.shift(); // Remove processed request
-      } catch (error: unknown) {
-        const errorMessage =
-          error instanceof Error ? error.message : "Unknown error occurred";
-        this.logger.error(
-          {
-            requestId: request.requestId,
-            chainId: request.chainId,
-            error: errorMessage,
-            retryCount: request.retryCount,
-          },
-          "Error fetching portfolio data"
-        );
-
-        if (request.retryCount < MAX_RETRIES) {
-          request.retryCount++;
-          // Move to end of queue for retry
-          this.queue.shift();
-          this.queue.push(request);
-          this.logger.info(
-            {
-              requestId: request.requestId,
-              chainId: request.chainId,
-              retryCount: request.retryCount,
-            },
-            "Retrying request"
-          );
-          await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY));
-        } else {
-          await this.env.PORTFOLIO_KV.put(
-            request.requestId,
-            JSON.stringify({
-              status: "failed",
-              error: errorMessage,
-              timestamp: Date.now(),
-            })
-          );
-          this.logger.warn(
-            { requestId: request.requestId, chainId: request.chainId },
-            "Max retries reached, marking as failed"
-          );
-          this.queue.shift();
-        }
-      }
-
-      // Rate limiting
-      await new Promise((resolve) => setTimeout(resolve, 1000)); // 1 RPS limit
-    }
-
-    this.processing = false;
-  }
-
-  private async fetchPortfolioData(chainId: number, address: `0x${string}`) {
-    const response = await axios.get<PortfolioResponse>(
-      `${INCH_API_URL}/portfolio/portfolio/v4/overview/protocols/details`,
+    this.logger.info(
       {
-        headers: {
-          Authorization: `Bearer ${this.env.INCH_API_KEY}`,
-        },
-        params: {
-          chain_id: chainId,
-          addresses: address,
-        },
-      }
+        chainId,
+        address,
+        positionCount: positions.length,
+        totalValueUsd: totalValue,
+      },
+      "Successfully fetched portfolio data"
     );
+
     return response.data;
   }
 
@@ -197,16 +148,7 @@ export class InchService {
     const data = await this.env.PORTFOLIO_KV.get(requestId);
 
     if (!data) {
-      const queuePosition = this.queue.findIndex(
-        (r) => r.requestId === requestId
-      );
-      const status =
-        queuePosition !== -1
-          ? { status: "queued", position: queuePosition + 1 }
-          : { status: "not_found" };
-
-      this.logger.debug({ requestId, status }, "Request status");
-      return status;
+      return { status: "not_found" };
     }
 
     const parsedData = JSON.parse(data);
@@ -217,87 +159,52 @@ export class InchService {
     return parsedData;
   }
 
-  async getAggregatedPortfolio(
+  async aggregatePortfolio(
     address: `0x${string}`
   ): Promise<AggregatedPortfolio> {
     this.logger.debug({ address }, "Aggregating portfolio data across chains");
-    const chains = (supportedChains as SupportedChains).result;
+    const chains = InchService.getSupportedChains();
 
     const result: AggregatedPortfolio = {
-      protocols: {},
-      timestamp: Date.now(),
-      address,
+      totalValueUsd: 0,
       chains: [],
+      positions: [],
     };
 
-    // Search for the most recent request IDs for this address
-    const searchPattern = `${address}-*`;
-    const keys = await this.env.PORTFOLIO_KV.list({ prefix: searchPattern });
+    await Promise.all(
+      chains.map(async (chainId) => {
+        try {
+          const data = await this.fetchPortfolioData(chainId, address);
+          result.positions.push(...data.result);
 
-    this.logger.debug(
-      { address, keyCount: keys.keys.length },
-      "Found portfolio data keys"
-    );
+          const chainValue = data.result.reduce(
+            (sum, pos) => sum + pos.value_usd,
+            0
+          );
+          result.totalValueUsd += chainValue;
 
-    // Process each chain's data
-    for (const chain of chains) {
-      try {
-        const key = keys.keys.find((k: { name: string }) =>
-          k.name.includes(`-${chain.id}-`)
-        );
-        if (!key) {
           result.chains.push({
-            id: chain.id,
-            name: chain.name,
-            status: "not_found",
-          });
-          continue;
-        }
-
-        const data = await this.env.PORTFOLIO_KV.get(key.name);
-        if (!data) continue;
-
-        const parsedData = JSON.parse(data);
-        if (parsedData.status === "completed") {
-          result.protocols[chain.id] = parsedData.data.protocols;
-          result.chains.push({
-            id: chain.id,
-            name: chain.name,
+            id: chainId,
+            name: InchService.getChainName(chainId),
             status: "completed",
+            data: data,
           });
-        } else if (parsedData.status === "failed") {
+        } catch (error) {
+          this.logger.error(
+            {
+              chainId: chainId,
+              error: error instanceof Error ? error.message : "Unknown error",
+            },
+            "Error aggregating chain data"
+          );
           result.chains.push({
-            id: chain.id,
-            name: chain.name,
+            id: chainId,
+            name: InchService.getChainName(chainId),
             status: "failed",
-            error: parsedData.error,
+            error: "Internal error while aggregating data",
           });
         }
-      } catch (error) {
-        this.logger.error(
-          {
-            chainId: chain.id,
-            error: error instanceof Error ? error.message : "Unknown error",
-          },
-          "Error aggregating chain data"
-        );
-        result.chains.push({
-          id: chain.id,
-          name: chain.name,
-          status: "failed",
-          error: "Internal error while aggregating data",
-        });
-      }
-    }
-
-    this.logger.info(
-      {
-        address,
-        chainCount: result.chains.length,
-        completedChains: result.chains.filter((c) => c.status === "completed")
-          .length,
-      },
-      "Portfolio aggregation completed"
+      })
     );
 
     return result;

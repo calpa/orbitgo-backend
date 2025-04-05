@@ -1,16 +1,18 @@
 import { Hono } from "hono";
+import { PortfolioQueueMessage } from "./types/inch";
 import { InchService } from "./services/inchService";
 import { createContextLogger } from "./services/logger";
 import { timing } from "hono/timing";
 
 const logger = createContextLogger('index.ts', 'middleware');
 
-type Bindings = {
+type Environment = {
   INCH_API_KEY: string;
   PORTFOLIO_KV: KVNamespace;
+  portfolio_queue: Queue<PortfolioQueueMessage>;
 };
 
-const app = new Hono<{ Bindings: Bindings }>();
+const app = new Hono<{ Bindings: Environment }>();
 
 // Initialize InchService for each request
 // Add request timing
@@ -218,13 +220,72 @@ app.get("/portfolio/:address", async (c) => {
   }
 
   routeLogger.debug({ address }, "Fetching aggregated portfolio data");
-  const portfolio = await inchService.getAggregatedPortfolio(address);
+  const data = await inchService.aggregatePortfolio(address);
   
   routeLogger.debug(
-    { address, chainCount: portfolio.chains.length },
+    { address, chainCount: data.chains.length },
     "Aggregated portfolio data retrieved"
   );
-  return c.json(portfolio);
+  return c.json(data);
 });
 
-export default app;
+export default {
+  fetch: app.fetch,
+  async queue(batch: MessageBatch<PortfolioQueueMessage>, env: Environment) {
+    const logger = createContextLogger('index.ts', 'queue.processor');
+    const inchService = new InchService(env);
+
+    for (const message of batch.messages) {
+      const { chainId, address, requestId } = message.body;
+      
+      try {
+        logger.info({ chainId, address, requestId }, 'Processing queued portfolio request');
+        const startTime = Date.now();
+        
+        const data = await inchService.fetchPortfolioData(chainId, address);
+        const duration = Date.now() - startTime;
+
+        logger.info(
+          { chainId, address, requestId, duration },
+          'Successfully processed portfolio request'
+        );
+
+        await env.PORTFOLIO_KV.put(
+          requestId,
+          JSON.stringify({
+            status: 'completed',
+            data,
+            timestamp: Date.now(),
+          })
+        );
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        logger.error(
+          { chainId, address, requestId, error: errorMessage },
+          'Failed to process portfolio request'
+        );
+
+        await env.PORTFOLIO_KV.put(
+          requestId,
+          JSON.stringify({
+            status: 'failed',
+            error: errorMessage,
+            timestamp: Date.now(),
+          })
+        );
+
+        await env.PORTFOLIO_KV.put(
+          requestId,
+          JSON.stringify({
+            status: 'failed',
+            error: errorMessage,
+            timestamp: Date.now(),
+          })
+        );
+      }
+
+      // Rate limiting - 1 RPS
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+  },
+};

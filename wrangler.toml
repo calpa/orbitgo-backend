@@ -3,8 +3,15 @@ main = "src/index.ts"
 compatibility_date = "2024-01-01"
 
 kv_namespaces = [
-  { binding = "PORTFOLIO_KV", id = "578fc361e580457da3ce2234d31f7358" }
+  { binding = "PORTFOLIO_KV", id = "578fc361e580457da3ce2234d31f7358" },
 ]
 
 [vars]
 INCH_API_URL = "https://api.1inch.dev"
+
+[[queues.producers]]
+queue = "portfolio-queue"
+binding = "portfolio_queue"
+
+[[queues.consumers]]
+queue = "portfolio-queue"
