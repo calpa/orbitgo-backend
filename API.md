@@ -19,6 +19,10 @@ Returns aggregated portfolio data across all supported chains for the given addr
 |-----------|------|-------------|
 | address | `string` | Ethereum address to fetch portfolio for |
 
+#### Notes
+- This endpoint automatically triggers data fetching for all chains if not already available
+- Uses cached data when possible to improve performance
+
 #### Response
 ```json
 {
@@ -45,20 +49,18 @@ Returns aggregated portfolio data across all supported chains for the given addr
 }
 ```
 
-### Fetch Single Chain Data
+### Enqueue Portfolio Request
 ```http
-POST /portfolio/fetch
+POST /portfolio/request/:chainId/:address
 ```
 
 Enqueues a request to fetch portfolio data for a specific chain.
 
-#### Request Body
-```json
-{
-  "chainId": 1,
-  "address": "0x..."
-}
-```
+#### Parameters
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| chainId | `number` | Chain ID to fetch data for |
+| address | `string` | Ethereum address to fetch portfolio for |
 
 #### Response
 ```json
@@ -67,19 +69,17 @@ Enqueues a request to fetch portfolio data for a specific chain.
 }
 ```
 
-### Fetch All Chains
+### Enqueue Multi-Chain Request
 ```http
-POST /portfolio/fetch/all
+POST /portfolio/request/all/:address
 ```
 
 Enqueues requests to fetch portfolio data for all supported chains.
 
-#### Request Body
-```json
-{
-  "address": "0x..."
-}
-```
+#### Parameters
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| address | `string` | Ethereum address to fetch portfolio for |
 
 #### Response
 ```json

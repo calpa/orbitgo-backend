@@ -30,10 +30,10 @@ A powerful Cloudflare Workers service that aggregates portfolio data across mult
 This service provides a comprehensive REST API for managing treasury data across multiple chains. For detailed API documentation, including endpoints, request/response formats, and examples, please see [API.md](API.md).
 
 Key features of the API include:
-- Multi-chain portfolio aggregation
-- Historical value tracking
-- Transaction history
-- Rate-limited queue processing
+- Multi-chain portfolio aggregation with automatic data fetching
+- Historical value tracking with caching support
+- Detailed transaction history with filtering options
+- Efficient queue-based processing for rate limits
 
 The service integrates with the [1inch Portfolio API](https://portal.1inch.dev) and requires an API key for authentication.
 
@@ -144,8 +144,6 @@ npm run deploy
 - `src/utils/logger.ts`: Structured logging configuration
 - `src/types/inch.ts`: TypeScript interfaces for API responses
 
-## ⚡ Queue Processing
-
 ## 🔄 Frontend Integration
 
 To integrate with the frontend, follow these steps:
@@ -168,27 +166,33 @@ const api = axios.create({
 3. **Example Usage**
 
 ```typescript
-// Fetch portfolio data
+// Fetch aggregated portfolio data
 const getPortfolio = async (address: string) => {
   const response = await api.get(`/portfolio/${address}`);
   return response.data;
 };
 
-// Start chain-specific fetch
-const fetchChainData = async (chainId: number, address: string) => {
-  const response = await api.post("/portfolio/fetch", { chainId, address });
-  return response.data.requestId;
+// Get value chart data
+const getValueChart = async (address: string, timerange = "1month") => {
+  const response = await api.get(`/portfolio/${address}/value-chart?timerange=${timerange}`);
+  return response.data;
+};
+
+// Get transaction history
+const getHistory = async (address: string, limit = 100) => {
+  const response = await api.get(`/portfolio/${address}/history?limit=${limit}`);
+  return response.data;
 };
 ```
 
-## 🔄 Queue Processing
+## ⚡ Queue Processing
 
 The service uses Cloudflare Queue to handle rate limiting when fetching portfolio data:
 
-1. Requests are enqueued with chain and address information
-2. Queue processor fetches data from 1inch API
-3. Results are stored in KV with format: `portfolio-{address}-{chainId}-{requestId}`
-4. Aggregation endpoint combines data from KV storage
+1. Portfolio requests are automatically enqueued when data is needed
+2. Queue processor respects 1inch API rate limits (10 RPS)
+3. Results are cached in KV storage for improved performance
+4. Aggregation combines data from all chains automatically
 
 ## ⚠️ Error Handling
 
