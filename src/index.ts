@@ -71,6 +71,10 @@ app.use("*", async (c, next) => {
   await next();
 });
 
+app.get("/", async (c) => {
+  return c.json({ message: "Hello, World!" });
+});
+
 /**
  * Fetch portfolio data for a single chain
  * @route POST /portfolio/fetch
