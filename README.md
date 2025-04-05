@@ -7,6 +7,11 @@ A powerful Cloudflare Workers service that aggregates portfolio data across mult
 
 ## ✨ Features
 
+### Token Management
+- Query token balances for any account across supported protocols
+- Support for pagination and filtering by contract addresses
+- Full integration with NODIT Token API
+
 - 🔗 Multi-chain portfolio aggregation
 - 🔄 Queue-based processing to handle rate limits
 - 💾 KV storage for caching responses

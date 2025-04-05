@@ -195,39 +195,54 @@ Returns transaction history for an address.
 }
 ```
 
-## Error Responses
+## Token API
 
-All endpoints may return the following error responses:
+### Get Tokens Owned By Account
+```http
+POST /token/:protocol/:network/tokens/owned
+```
 
-### 400 Bad Request
+Retrieves a list of tokens held by a specific account, including balances and token contract metadata.
+
+#### Parameters
+- `protocol` (path) - The protocol to query (e.g., ethereum)
+- `network` (path) - The network to query (e.g., mainnet)
+
+#### Request Body
 ```json
 {
-  "error": "Invalid address format"
+  "accountAddress": "0x1234...",          // Required: Account address to query
+  "contractAddresses": ["0x1234..."],  // Optional: Filter by specific token contracts
+  "page": 1,                           // Optional: Page number (1-100)
+  "rpp": 20,                          // Optional: Results per page (1-1000)
+  "cursor": "abc...",                  // Optional: Cursor for pagination
+  "withCount": false                   // Optional: Include total count
 }
 ```
 
-### 401 Unauthorized
+#### Response
 ```json
 {
-  "error": "Invalid API key"
+  "rpp": 20,
+  "cursor": "abc...",
+  "items": [
+    {
+      "ownerAddress": "0x1234...",
+      "balance": "1000000000000000000",
+      "contract": {
+        "address": "0x1234...",
+        "name": "Token",
+        "symbol": "TKN",
+        "decimals": 18,
+        "totalSupply": "1000000000000000000000000",
+        "type": "ERC20"
+      }
+    }
+  ]
 }
 ```
 
-### 429 Too Many Requests
-```json
-{
-  "error": "Rate limit exceeded"
-}
-```
-
-### 500 Internal Server Error
-```json
-{
-  "error": "Internal server error"
-}
-```
-
-## Webhook Endpoints
+## Webhook API
 
 ### Create Webhook
 ```http
