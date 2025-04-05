@@ -89,3 +89,20 @@ export interface PortfolioStatus {
   position?: number;
   timestamp?: number;
 }
+
+export interface ValueChartItem {
+  timestamp: number;
+  value_usd: number;
+}
+
+export interface ValueChartResponse {
+  result: ValueChartItem[];
+  meta?: {
+    cached_at?: number;
+    system?: {
+      total_time: number;
+    };
+  };
+}
+
+export type TimeRange = '1day' | '1week' | '1month' | '1year' | 'all';
