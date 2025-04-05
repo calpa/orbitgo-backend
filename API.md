@@ -226,3 +226,72 @@ All endpoints may return the following error responses:
   "error": "Internal server error"
 }
 ```
+
+## Webhook Endpoints
+
+### Create Webhook
+```http
+POST /webhook/:protocol/:network/webhooks
+```
+
+Create a new webhook subscription for monitoring blockchain events.
+
+#### Parameters
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| protocol | `string` | Protocol to monitor (ethereum, arbitrum, base, etc.) |
+| network | `string` | Network to monitor (mainnet, testnet, sepolia, etc.) |
+
+#### Request Body
+```json
+{
+  "eventType": "SUCCESSFUL_TRANSACTION",
+  "description": "Webhook for successful transaction",
+  "notification": {
+    "webhookUrl": "https://example.com/webhook"
+  },
+  "condition": {
+    "addresses": ["0x..."] 
+  }
+}
+```
+
+#### Response (201 Created)
+```json
+{
+  "subscriptionId": "uuid-v4",
+  "description": "Webhook for successful transaction",
+  "protocol": "ethereum",
+  "network": "mainnet",
+  "eventType": "SUCCESSFUL_TRANSACTION",
+  "notification": {
+    "webhookUrl": "https://example.com/webhook",
+    "signingKey": "signing-key"
+  },
+  "createdAt": "2024-04-05T09:41:36Z",
+  "condition": {
+    "addresses": ["0x..."]
+  }
+}
+```
+
+### Delete Webhook
+```http
+DELETE /webhook/:protocol/:network/webhooks/:subscriptionId
+```
+
+Delete an existing webhook subscription.
+
+#### Parameters
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| protocol | `string` | Protocol of the webhook |
+| network | `string` | Network of the webhook |
+| subscriptionId | `string` | ID of the webhook subscription |
+
+#### Response
+```json
+{
+  "message": "Webhook deleted successfully"
+}
+```

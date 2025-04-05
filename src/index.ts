@@ -4,8 +4,8 @@ import { timing } from "hono/timing";
 import { InchService } from "./services/inchService";
 import { createContextLogger } from "./utils/logger";
 import { portfolio } from "./routes/portfolio";
+import { webhook } from "./routes/webhook";
 import { Environment } from "./types/environment";
-import { PortfolioQueueMessage } from "./types/inch";
 
 const app = new Hono<{ Bindings: Environment }>();
 const logger = createContextLogger("/src/index.ts", "middleware");
@@ -15,6 +15,9 @@ const logger = createContextLogger("/src/index.ts", "middleware");
 app.use(timing());
 
 app.use(cors());
+
+// Add webhook routes
+app.route("/webhook", webhook);
 
 // Add request logging
 app.use("*", async (c, next) => {
