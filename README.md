@@ -37,7 +37,7 @@ Key features of the API include:
 
 The service integrates with the [1inch Portfolio API](https://portal.1inch.dev) and requires an API key for authentication.
 
-## 🏗️ System Architecture
+## 🔧️ System Architecture
 
 ```mermaid
 flowchart TB
@@ -49,6 +49,7 @@ flowchart TB
         API[API Layer]
         Queue[Queue Worker]
         KV[(KV Storage)]
+        Cache[(Cache Layer)]
     end
 
     subgraph "1inch API"
@@ -61,15 +62,20 @@ flowchart TB
     FE -->|HTTP Requests| API
     API -->|Responses| FE
 
-    %% Queue processing
-    API -->|Enqueue Requests| Queue
-    Queue -->|Store Results| KV
-    API -->|Read Cache| KV
+    %% Data flow
+    API -->|1. Check Cache| Cache
+    Cache -->|2. Cache Hit| API
+    API -->|3. Enqueue Request| Queue
+    Queue -->|4. Process Request| Portfolio
+    Queue -->|5. Store Result| KV
+    API -->|6. Aggregate Data| KV
 
-    %% External API calls
-    Queue -->|Fetch Data| Portfolio
-    API -->|Fetch History| History
-    API -->|Fetch Value Chart| Value
+    %% Direct API calls
+    API -->|History Requests| History
+    API -->|Value Chart| Value
+
+    %% Cache updates
+    Queue -->|Update Cache| Cache
 
     %% Styling
     classDef client fill:#f9f,stroke:#333,stroke-width:2px
@@ -79,7 +85,7 @@ flowchart TB
 
     class FE client
     class API,Queue worker
-    class KV storage
+    class KV,Cache storage
     class Portfolio,History,Value external
 ```
 
@@ -88,26 +94,34 @@ flowchart TB
 1. **Frontend Application**
    - Makes HTTP requests to the backend API
    - Handles data visualization and user interactions
+   - Supports real-time portfolio tracking
 
 2. **API Layer (Cloudflare Worker)**
    - Handles incoming HTTP requests
-   - Manages request queuing and rate limiting
-   - Aggregates data from multiple chains
+   - Implements intelligent caching strategy
+   - Automatically triggers data fetching when needed
+   - Aggregates multi-chain portfolio data
 
-3. **Queue Worker**
-   - Processes portfolio data requests asynchronously
-   - Respects 1inch API rate limits
-   - Stores results in KV storage
+3. **Cache Layer**
+   - Provides fast access to frequently requested data
+   - Implements TTL-based cache invalidation
+   - Reduces load on external APIs
 
-4. **KV Storage**
-   - Caches API responses
+4. **Queue Worker**
+   - Processes portfolio requests asynchronously
+   - Implements rate limiting (10 RPS)
+   - Updates cache on new data
+   - Handles request retries and error recovery
+
+5. **KV Storage**
    - Stores portfolio data and request status
-   - Enables efficient data aggregation
+   - Enables efficient cross-chain data aggregation
+   - Maintains request history and error logs
 
-5. **1inch APIs**
-   - Portfolio API: Fetches token holdings and balances
-   - History API: Retrieves transaction history
-   - Value Chart API: Gets historical value data
+6. **1inch APIs**
+   - Portfolio API: Real-time token holdings and balances
+   - History API: Detailed transaction history with filtering
+   - Value Chart API: Historical portfolio value tracking
 
 ## 🚀 Setup
 
