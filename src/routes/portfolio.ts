@@ -124,29 +124,32 @@ portfolio.get("/:address/value-chart", async (c) => {
     [chainId: number]: ValueChartResponse["result"];
   } = {};
 
-  for (const chain of chains) {
-    try {
-      const data = await inchService.getValueChart(
-        address,
-        chain.id,
-        timerange,
-        useCache
-      );
-      routeLogger.debug(
-        { address, dataPoints: data.result.length },
-        "Value chart data retrieved"
-      );
-      result[chain.id] = data.result;
-    } catch (error) {
-      routeLogger.error(
-        {
+  await Promise.all(
+    chains.map(async (chain) => {
+      try {
+        const data = await inchService.getValueChart(
           address,
-          error: error instanceof Error ? error.message : "Unknown error",
-        },
-        "Failed to fetch value chart data"
-      );
-    }
-  }
+          chain.id,
+          timerange,
+          useCache
+        );
+        routeLogger.debug(
+          { address, chainId: chain.id, dataPoints: data.result.length },
+          "Value chart data retrieved"
+        );
+        result[chain.id] = data.result;
+      } catch (error) {
+        routeLogger.error(
+          {
+            address,
+            chainId: chain.id,
+            error: error instanceof Error ? error.message : "Unknown error",
+          },
+          "Failed to fetch value chart data"
+        );
+      }
+    })
+  );
 
   return c.json({
     message: "Value chart data retrieved",
