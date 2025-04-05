@@ -44,6 +44,54 @@ The service integrates with the [1inch Portfolio API](https://portal.1inch.dev) 
 
 ## 🔧️ System Architecture
 
+### System Overview
+
+```mermaid
+graph TB
+    Client[Client Applications] --> API[REST API Layer]
+    API --> TokenService[Token Service]
+    API --> WebhookService[Webhook Service]
+    API --> PortfolioService[Portfolio Service]
+    
+    TokenService --> NODIT[NODIT Token API]
+    WebhookService --> NODIT
+    WebhookService --> WebhookKV[Cloudflare KV<br/>NODIT_WEBHOOK]
+    PortfolioService --> PortfolioKV[Cloudflare KV<br/>PORTFOLIO_KV]
+    PortfolioService --> Queue[Portfolio Queue]
+```
+
+### Core Services
+
+1. **Token Service**
+   - Manages token balance queries across multiple protocols
+   - Integrates with NODIT Token API for real-time data
+   - Supports pagination and contract filtering
+
+2. **Webhook Service**
+   - Handles webhook subscriptions for transaction monitoring
+   - Stores webhook metadata in Cloudflare KV
+   - Supports address-based filtering and retrieval
+
+3. **Portfolio Service**
+   - Aggregates multi-chain portfolio data
+   - Uses queue-based processing for rate limiting
+   - Caches responses in Cloudflare KV
+
+### Infrastructure
+
+1. **Storage Layer**
+   - **NODIT_WEBHOOK KV**: Persistent storage for webhook subscriptions
+   - **PORTFOLIO_KV**: Cache for portfolio aggregation results
+   - **Queue System**: Asynchronous job processing for portfolio updates
+
+2. **API Layer**
+   - RESTful endpoints with OpenAPI documentation
+   - Request/response validation using Zod schemas
+   - Comprehensive error handling and logging
+   - CORS-enabled for client applications
+
+### Request Flow
+
 ```mermaid
 flowchart TB
     subgraph Client
