@@ -101,45 +101,52 @@ flowchart TB
     subgraph "Cloudflare Workers"
         API[API Layer]
         Queue[Queue Worker]
-        KV[(KV Storage)]
-        Cache[(Cache Layer)]
+        WebhookKV[(NODIT_WEBHOOK KV)]
+        PortfolioKV[(PORTFOLIO_KV)]
     end
 
-    subgraph "1inch API"
-        Portfolio[Portfolio API]
-        History[History API]
-        Value[Value Chart API]
+    subgraph "External APIs"
+        subgraph "NODIT API"
+            TokenAPI[Token API]
+            WebhookAPI[Webhook API]
+        end
+        subgraph "1inch API"
+            Portfolio[Portfolio API]
+            History[History API]
+            Value[Value Chart API]
+        end
     end
 
     %% Client interactions
     FE -->|HTTP Requests| API
     API -->|Responses| FE
 
-    %% Data flow
-    API -->|1. Check Cache| Cache
-    Cache -->|2. Cache Hit| API
-    API -->|3. Enqueue Request| Queue
-    Queue -->|4. Process Request| Portfolio
-    Queue -->|5. Store Result| KV
-    API -->|6. Aggregate Data| KV
+    %% Token Service flows
+    API -->|Token Balances| TokenAPI
+    API -->|Create/Delete Webhooks| WebhookAPI
+    API -->|Store Webhook Data| WebhookKV
 
-    %% Direct API calls
-    API -->|History Requests| History
-    API -->|Value Chart| Value
-
-    %% Cache updates
-    Queue -->|Update Cache| Cache
+    %% Portfolio Service flows
+    API -->|Portfolio Data| Portfolio
+    API -->|Historical Data| History
+    API -->|Value Charts| Value
+    API -->|Cache Results| PortfolioKV
+    API -->|Queue Updates| Queue
+    Queue -->|Process Portfolio| Portfolio
+    Queue -->|Update Cache| PortfolioKV
 
     %% Styling
     classDef client fill:#f9f,stroke:#333,stroke-width:2px
     classDef worker fill:#bbf,stroke:#333,stroke-width:2px
     classDef storage fill:#ff9,stroke:#333,stroke-width:2px
     classDef external fill:#bfb,stroke:#333,stroke-width:2px
+    classDef nodit fill:#fbf,stroke:#333,stroke-width:2px
 
     class FE client
     class API,Queue worker
-    class KV,Cache storage
+    class WebhookKV,PortfolioKV storage
     class Portfolio,History,Value external
+    class TokenAPI,WebhookAPI nodit
 ```
 
 ### Key Components
