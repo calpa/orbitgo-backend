@@ -269,21 +269,37 @@ webhook.delete("/:protocol/:network/webhooks/:subscriptionId", async (c) => {
 
 /**
  * Get all stored webhook subscriptions
- * @route GET /webhooks
+ * @route GET /webhooks?address={address}
+ * @param address - The address to filter webhooks by
+ * @example
+ * GET /webhooks?address=0x1234567890123456789012345678901234567890
  */
 webhook.get("/webhooks", async (c) => {
   const routeLogger = createContextLogger("webhook.ts", "webhook.list");
   const webhookService = new WebhookService(c.env.NODIT_API_KEY, c.env);
 
   try {
-    const webhookList = await webhookService.getStoredWebhooks();
+    const address = c.req.query("address");
+    if (!address) {
+      return c.json(
+        {
+          code: "INVALID_REQUEST",
+          message: "Missing required parameter: address",
+        },
+        400
+      );
+    }
+    const webhooks = await webhookService.getStoredWebhooks();
+    const filteredWebhooks = webhooks.webhooks.filter((webhook) =>
+      webhook.addresses.includes(address)
+    );
 
     routeLogger.info(
-      { count: webhookList.webhooks.length },
+      { count: filteredWebhooks.length },
       "Retrieved stored webhooks"
     );
 
-    return c.json(webhookList);
+    return c.json(filteredWebhooks);
   } catch (error) {
     routeLogger.error(
       { error: error instanceof Error ? error.message : "Unknown error" },
