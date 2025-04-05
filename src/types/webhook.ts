@@ -91,4 +91,13 @@ export type WebhookNotification = z.infer<typeof webhookNotificationSchema>;
 export type WebhookCondition = z.infer<typeof webhookConditionSchema>;
 export type CreateWebhookRequest = z.infer<typeof createWebhookRequestSchema>;
 export type WebhookResponse = z.infer<typeof webhookResponseSchema>;
+
+export interface StoredWebhook extends WebhookResponse {
+  addresses: string[];
+}
+
+export interface WebhookList {
+  webhooks: StoredWebhook[];
+  lastUpdated: string;
+}
 export type ErrorResponse = z.infer<typeof errorResponseSchema>;

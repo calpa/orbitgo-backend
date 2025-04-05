@@ -10,12 +10,105 @@ import {
 } from "../types/webhook";
 import { z } from "zod";
 
+const createAllChainsWebhookSchema = z.object({
+  addresses: z.array(z.string().regex(/^0x[a-fA-F0-9]{40}$/)),
+  webhookUrl: z.string().url(),
+});
+
 const webhook = new Hono<{ Bindings: Environment }>();
-const logger = createContextLogger("/src/routes/webhook.ts", "webhook");
+
+/**
+ * Create webhook subscriptions for all supported chains
+ * @route POST /
+ * @example
+ * JSON input:
+ * {
+ *   "addresses": ["0x1234567890123456789012345678901234567890"],
+ *   "webhookUrl": "https://example.com/webhook"
+ * }
+ */
+webhook.post("/", async (c) => {
+  const routeLogger = createContextLogger(
+    "webhook.ts",
+    "webhook.createForAddress"
+  );
+  const webhookService = new WebhookService(c.env.NODIT_API_KEY, c.env);
+
+  try {
+    const { addresses, webhookUrl } = createAllChainsWebhookSchema.parse(
+      await c.req.json()
+    );
+
+    routeLogger.debug(
+      { addresses },
+      "Creating webhooks for address on all chains"
+    );
+
+    const responses = await webhookService.createWebhooksForAllChains(
+      addresses,
+      webhookUrl
+    );
+
+    routeLogger.info(
+      { addresses, count: responses.length },
+      "Successfully created webhooks for address on all chains"
+    );
+
+    return c.json(
+      {
+        message: "Successfully created webhooks for address on all chains",
+        subscriptions: responses,
+      },
+      201
+    );
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      routeLogger.error(
+        { error: error.errors },
+        "Invalid webhook request data"
+      );
+      return c.json(
+        {
+          code: "INVALID_REQUEST",
+          message: "Invalid request data",
+          errors: error.errors,
+        },
+        400
+      );
+    }
+
+    if (axios.isAxiosError(error)) {
+      const status = error.response?.status || 500;
+      const data = error.response?.data || {
+        code: "UNKNOWN_ERROR",
+        message: "An unknown error occurred",
+      };
+
+      routeLogger.error({ error: data, status }, "Failed to create webhooks");
+
+      return c.json(data, status as 400 | 401 | 403 | 404 | 429 | 500);
+    }
+
+    routeLogger.error(
+      { error: error instanceof Error ? error.message : "Unknown error" },
+      "Failed to create webhooks"
+    );
+
+    return c.json(
+      {
+        code: "INTERNAL_SERVER_ERROR",
+        message: "Failed to create webhooks",
+      },
+      500
+    );
+  }
+});
 
 /**
  * Create a new webhook subscription
  * @route POST /:protocol/:network/webhooks
+ * @param protocol - The protocol to create the webhook for
+ * @param network - The network to create the webhook for
  * @example
  * JSON input:
  * {
@@ -32,7 +125,7 @@ const logger = createContextLogger("/src/routes/webhook.ts", "webhook");
  */
 webhook.post("/:protocol/:network/webhooks", async (c) => {
   const routeLogger = createContextLogger("webhook.ts", "webhook.create");
-  const webhookService = new WebhookService(c.env.NODIT_API_KEY);
+  const webhookService = new WebhookService(c.env.NODIT_API_KEY, c.env);
 
   try {
     const protocol = protocolSchema.parse(c.req.param("protocol"));
@@ -111,7 +204,7 @@ webhook.post("/:protocol/:network/webhooks", async (c) => {
  */
 webhook.delete("/:protocol/:network/webhooks/:subscriptionId", async (c) => {
   const routeLogger = createContextLogger("webhook.ts", "webhook.delete");
-  const webhookService = new WebhookService(c.env.NODIT_API_KEY);
+  const webhookService = new WebhookService(c.env.NODIT_API_KEY, c.env);
 
   try {
     const protocol = protocolSchema.parse(c.req.param("protocol"));
@@ -168,6 +261,39 @@ webhook.delete("/:protocol/:network/webhooks/:subscriptionId", async (c) => {
       {
         code: "INTERNAL_SERVER_ERROR",
         message: "Failed to delete webhook",
+      },
+      500
+    );
+  }
+});
+
+/**
+ * Get all stored webhook subscriptions
+ * @route GET /webhooks
+ */
+webhook.get("/webhooks", async (c) => {
+  const routeLogger = createContextLogger("webhook.ts", "webhook.list");
+  const webhookService = new WebhookService(c.env.NODIT_API_KEY, c.env);
+
+  try {
+    const webhookList = await webhookService.getStoredWebhooks();
+
+    routeLogger.info(
+      { count: webhookList.webhooks.length },
+      "Retrieved stored webhooks"
+    );
+
+    return c.json(webhookList);
+  } catch (error) {
+    routeLogger.error(
+      { error: error instanceof Error ? error.message : "Unknown error" },
+      "Failed to get stored webhooks"
+    );
+
+    return c.json(
+      {
+        code: "INTERNAL_SERVER_ERROR",
+        message: "Failed to get stored webhooks",
       },
       500
     );
