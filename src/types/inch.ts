@@ -106,3 +106,49 @@ export interface ValueChartResponse {
 }
 
 export type TimeRange = '1day' | '1week' | '1month' | '1year' | 'all';
+
+export type TokenAction = {
+  chainId: string;
+  address: string;
+  standard: 'Native' | 'ERC20' | 'ERC721' | 'ERC1155';
+  fromAddress: string;
+  toAddress: string;
+  tokenId?: string;
+  amount?: string;
+  direction: 'In' | 'Out' | 'Self' | 'On';
+  priceToUsd?: number;
+};
+
+export type TransactionDetails = {
+  orderInBlock: number;
+  txHash: string;
+  chainId: number;
+  blockNumber: number;
+  blockTimeSec: number;
+  status: string;
+  type: string;
+  tokenActions: TokenAction[];
+  fromAddress: string;
+  toAddress: string;
+  nonce: number;
+  feeInSmallestNative: string;
+  nativeTokenPriceToUsd: number | null;
+  meta?: {
+    protocol?: string;
+  };
+};
+
+export type HistoryEvent = {
+  timeMs: number;
+  address: string;
+  type: number;
+  rating: 'Reliable' | 'Scam';
+  direction: 'in' | 'out';
+  details: TransactionDetails;
+  id: string;
+  eventOrderInTransaction: number;
+};
+
+export type HistoryResponse = {
+  items: HistoryEvent[];
+};

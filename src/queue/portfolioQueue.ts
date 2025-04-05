@@ -67,7 +67,8 @@ export async function handlePortfolioQueue(
       );
     }
 
-    // Rate limiting - 1 RPS
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+    // Rate limiting - 10 RPS (Increased for hackathon promotion)
+    // Normal rate is 1 RPS, but temporarily increased to handle higher throughput
+    await new Promise((resolve) => setTimeout(resolve, 100));
   }
 }

@@ -149,4 +149,43 @@ portfolio.get("/status/:requestId", async (c) => {
   return c.json(status);
 });
 
+/**
+ * Get transaction history for an address
+ * @route GET /:address/history
+ */
+portfolio.get("/:address/history", async (c) => {
+  const routeLogger = createContextLogger("portfolio.ts", "portfolio.history");
+  const inchService = c.get("inchService");
+  const address = c.req.param("address") as `0x${string}`;
+
+  // Get query parameters
+  const { searchParams } = new URL(c.req.url);
+  const chainId = searchParams.get("chainId") ? parseInt(searchParams.get("chainId")!) : undefined;
+  const limit = searchParams.get("limit") ? parseInt(searchParams.get("limit")!) : undefined;
+  const tokenAddress = searchParams.get("tokenAddress") || undefined;
+  const fromTimestampMs = searchParams.get("fromTimestampMs") ? parseInt(searchParams.get("fromTimestampMs")!) : undefined;
+  const toTimestampMs = searchParams.get("toTimestampMs") ? parseInt(searchParams.get("toTimestampMs")!) : undefined;
+
+  routeLogger.debug(
+    { address, chainId, limit, tokenAddress, fromTimestampMs, toTimestampMs },
+    "Getting transaction history"
+  );
+
+  const history = await inchService.getHistory(
+    address,
+    chainId,
+    limit,
+    tokenAddress,
+    fromTimestampMs,
+    toTimestampMs
+  );
+
+  routeLogger.debug(
+    { address, eventCount: history.items.length },
+    "Transaction history retrieved"
+  );
+
+  return c.json(history);
+});
+
 export { portfolio };

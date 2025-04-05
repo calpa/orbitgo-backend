@@ -34,7 +34,7 @@ This service integrates with the [1inch Portfolio API](https://portal.1inch.dev)
 #### Authentication
 
 - Requires an API key from [1inch Portal](https://portal.1inch.dev)
-- Rate limit: 1 request per second (public tier)
+- Rate limit: 10 requests per second (increased for hackathon promotion, normally 1 RPS)
 
 #### Key Endpoints Used
 
@@ -178,6 +178,6 @@ The service uses Cloudflare Queue to handle rate limiting when fetching portfoli
 ## ⚠️ Error Handling
 
 - Failed requests are stored in KV with error information
-- Rate limiting is implemented (1 request per second)
+- Rate limiting is implemented (10 requests per second during hackathon)
 - Detailed error logging with context
 - Proper HTTP status codes for API responses

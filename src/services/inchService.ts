@@ -1,5 +1,5 @@
 import axios from "axios";
-import { PortfolioResponse, TimeRange, ValueChartResponse } from "../types/inch";
+import { HistoryResponse, PortfolioResponse, TimeRange, ValueChartResponse } from "../types/inch";
 import { createContextLogger } from "../utils/logger";
 
 interface AggregatedPortfolio {
@@ -26,6 +26,45 @@ interface PortfolioPosition {
 }
 
 export class InchService {
+  async getHistory(
+    address: `0x${string}`,
+    chainId?: number,
+    limit: number = 100,
+    tokenAddress?: string,
+    fromTimestampMs?: number,
+    toTimestampMs?: number
+  ): Promise<HistoryResponse> {
+    const url = new URL(`https://api.1inch.dev/history/v2.0/history/${address}/events`);
+    
+    if (chainId) url.searchParams.append('chainId', chainId.toString());
+    if (limit) url.searchParams.append('limit', limit.toString());
+    if (tokenAddress) url.searchParams.append('tokenAddress', tokenAddress);
+    if (fromTimestampMs) url.searchParams.append('fromTimestampMs', fromTimestampMs.toString());
+    if (toTimestampMs) url.searchParams.append('toTimestampMs', toTimestampMs.toString());
+
+    this.logger.info(
+      { address, chainId, limit, tokenAddress, fromTimestampMs, toTimestampMs },
+      'Fetching history from 1inch API'
+    );
+
+    const response = await axios.get<HistoryResponse>(url.toString(), {
+      headers: {
+        Authorization: `Bearer ${this.env.INCH_API_KEY}`,
+        Accept: 'application/json',
+      },
+    });
+
+    this.logger.info(
+      {
+        address,
+        chainId,
+        eventCount: response.data.items.length,
+      },
+      'Successfully fetched history data'
+    );
+
+    return response.data;
+  }
   private logger = createContextLogger(
     "/src/services/inchService.ts",
     "InchService"
