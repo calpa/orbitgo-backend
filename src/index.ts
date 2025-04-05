@@ -176,4 +176,55 @@ app.get("/portfolio/status/:requestId", async (c) => {
   return c.json(status);
 });
 
+/**
+ * Get aggregated portfolio data across all chains for an address
+ * @route GET /portfolio/:address
+ * @param {string} address - Ethereum address starting with 0x
+ * @returns {object} Response object
+ * @returns {object} response.protocols - Portfolio data by chain ID
+ * @returns {number} response.timestamp - Timestamp of the aggregation
+ * @returns {string} response.address - The queried address
+ * @returns {object[]} response.chains - Status of each chain
+ * @returns {number} response.chains[].id - Chain ID
+ * @returns {string} response.chains[].name - Chain name
+ * @returns {string} response.chains[].status - Status of data fetch (completed/failed/not_found)
+ * @returns {string} [response.chains[].error] - Error message if status is failed
+ * @example
+ * // Request
+ * GET /portfolio/0x123...
+ *
+ * // Response
+ * {
+ *   "protocols": {
+ *     "1": [...],
+ *     "137": [...]
+ *   },
+ *   "timestamp": 1234567890,
+ *   "address": "0x123...",
+ *   "chains": [
+ *     { "id": 1, "name": "Ethereum", "status": "completed" },
+ *     { "id": 137, "name": "Polygon", "status": "completed" },
+ *     { "id": 56, "name": "BSC", "status": "failed", "error": "Rate limit exceeded" }
+ *   ]
+ * }
+ */
+app.get("/portfolio/:address", async (c) => {
+  const routeLogger = createContextLogger('index.ts', 'portfolio.get');
+  const inchService = c.get("inchService");
+  const address = c.req.param("address") as `0x${string}`;
+
+  if (!address.startsWith('0x')) {
+    return c.json({ error: "Invalid address format" }, 400);
+  }
+
+  routeLogger.debug({ address }, "Fetching aggregated portfolio data");
+  const portfolio = await inchService.getAggregatedPortfolio(address);
+  
+  routeLogger.debug(
+    { address, chainCount: portfolio.chains.length },
+    "Aggregated portfolio data retrieved"
+  );
+  return c.json(portfolio);
+});
+
 export default app;
